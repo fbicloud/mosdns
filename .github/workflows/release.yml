@@ -1,104 +1,40 @@
 name: Release mosdns
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "30 20 * * *"
   push:
-    branches:
-      - 6666
-    paths:
-      - ".github/workflows/mosdns.yaml"
+    tags:
+      - 'v6666'
 
 jobs:
+
   build-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Clone mosdns repository
       - uses: actions/checkout@v3
-        # uses: actions/checkout@v4
-        # with:
-        #   repository: fbicloud/mosdns
-        #   path: mosdns
-        #   fetch-depth: 0 # fetch-depth: 0 is needed for git describe
-
-      - name: Generate version and commit info
-        id: version
-        run: |
-          cd mosdns
-          COMMIT_HASH_FULL=$(git rev-parse HEAD)
-          COMMIT_HASH_SHORT=$(git rev-parse --short HEAD)
-          COMMIT_DATE_FULL=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S')
-          COMMIT_DATE_ONLY=$(git log -1 --format=%cd --date=format:'%Y%m%d')
-          VERSION="ph-yyds-${COMMIT_DATE_ONLY}-${COMMIT_HASH_SHORT}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "commit_hash=${COMMIT_HASH_FULL}" >> $GITHUB_OUTPUT
-          echo "commit_date=${COMMIT_DATE_FULL}" >> $GITHUB_OUTPUT
-          echo "Generated version: ${VERSION}"
-
-      - name: Check if release exists
-        id: check_release
-        run: |
-          if gh release view "mosdns" >/dev/null 2>&1; then
-            LATEST_COMMIT=$(gh release view "mosdns" --json body -q .body | grep -o 'Commit: [a-f0-9]*' | cut -d' ' -f2)
-            CURRENT_COMMIT=$(cd mosdns && git rev-parse HEAD)
-            if [ "$LATEST_COMMIT" == "$CURRENT_COMMIT" ]; then
-              echo "Release for this commit already exists. Skipping build."
-              echo "exists=true" >> $GITHUB_OUTPUT
-            else
-              echo "New commit found. Proceeding with build."
-              echo "exists=false" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "No previous release found. Proceeding with build."
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Go
-        if: steps.check_release.outputs.exists == 'false'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v3
         with:
-          go-version: '1.22'
+          go-version: '1.23'
           check-latest: true
           cache: true
 
       - name: Set up Python
-        if: steps.check_release.outputs.exists == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Build
-        if: steps.check_release.outputs.exists == 'false'
         run: |
-          cd mosdns
           go mod tidy
-          # 关键修复：用 sed "重写" release.py 中获取版本号的逻辑。
-          # 将 VERSION = subprocess.check_output(...) 这一行
-          # 替换为 VERSION = os.environ.get('CUSTOM_VERSION', 'dev/unknown')
-          # 这样脚本就会从我们定义的环境变量 CUSTOM_VERSION 中读取版本号。
-          sed -i "s|VERSION = subprocess.check_output.*|VERSION = os.environ.get('CUSTOM_VERSION', 'dev/unknown')|" release.py
-          
-          # 现在，运行被我们修改过的脚本
           python ./release.py
         env:
           CGO_ENABLED: '0'
-          # 将我们生成的版本号通过 CUSTOM_VERSION 环境变量传递进去
-          CUSTOM_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Publish
-        if: steps.check_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mosdns
-          name: "MosDNS"
-          body: |
-            源码时间: ${{ steps.version.outputs.commit_date }}
-            版本号: ${{ steps.version.outputs.version }}
-            Commit: ${{ steps.version.outputs.commit_hash }}
-          files: './mosdns/release/mosdns*.zip'
-          prerelease: false
+          files: './release/mosdns*.zip'
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
