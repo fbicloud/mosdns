@@ -1,9 +1,10 @@
 name: Release mosdns
 
 on:
+  workflow_dispatch:
   push:
-    tags:
-      - 'v6666'
+    branches:
+      - dev
 
 jobs:
 
