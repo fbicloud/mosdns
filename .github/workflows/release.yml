@@ -25,6 +25,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Generate date-based tag
+        id: tag
+        run: echo "tag=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+        
       - name: Build
         run: |
           go mod tidy
@@ -36,6 +40,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: './release/mosdns*.zip'
+          tag_name: ${{ steps.tag.outputs.tag }}
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
